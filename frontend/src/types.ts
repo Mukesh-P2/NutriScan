@@ -2,6 +2,12 @@
 
 export type Verdict = "healthy" | "moderate" | "unhealthy";
 export type NutrientStatus = "good" | "high" | "low" | "neutral";
+export type FoodType = "veg" | "non_veg" | "unknown";
+
+export interface DietTag {
+  name: string;
+  compatible: boolean;
+}
 
 export interface Nutrient {
   name: string;
@@ -21,6 +27,9 @@ export interface AnalysisResult {
   cons: string[];
   tips: string[];
   key_nutrients: Nutrient[];
+  food_type: FoodType;
+  allergens: string[];
+  diet_tags: DietTag[];
   recommended_serving: string;
   max_per_day: string;
   daily_context_note: string;

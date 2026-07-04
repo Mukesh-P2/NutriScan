@@ -18,6 +18,17 @@ class NutrientStatus(str, Enum):
     neutral = "neutral"
 
 
+class FoodType(str, Enum):
+    veg = "veg"
+    non_veg = "non_veg"
+    unknown = "unknown"
+
+
+class DietTag(BaseModel):
+    name: str = Field(description="Diet name: Vegetarian, Vegan, Jain, Keto, or Gluten-free")
+    compatible: bool = Field(description="True if the product fits this diet")
+
+
 class Nutrient(BaseModel):
     name: str = Field(description="Nutrient name, e.g. Protein, Sugar, Sodium")
     amount_per_serving: str = Field(description="Amount in one serving with unit, e.g. '5g'")
@@ -56,6 +67,18 @@ class AnalysisResult(BaseModel):
             "'The full 90g pack is ~1.8 servings (~504 kcal) and covers ~76% of your daily saturated-fat limit; "
             "eat about half the pack in one sitting.' Null if total weight is unknown."
         ),
+    )
+    food_type: FoodType = Field(
+        default=FoodType.unknown,
+        description="Veg/non-veg based on the Indian green/red dot mark, or inferred from ingredients",
+    )
+    allergens: list[str] = Field(
+        default_factory=list,
+        description="Major allergens actually PRESENT, e.g. Milk, Egg, Peanuts, Tree nuts, Wheat/Gluten, Soy, Fish, Shellfish, Sesame, Mustard",
+    )
+    diet_tags: list[DietTag] = Field(
+        default_factory=list,
+        description="Compatibility with each of: Vegetarian, Vegan, Jain, Keto, Gluten-free",
     )
     contains_trans_fat: bool = Field(default=False, description="True if trans fat > 0 or partially hydrogenated oils listed")
     is_ultra_processed: bool = Field(default=False, description="True if ultra-processed / long additive list")

@@ -1,4 +1,4 @@
-import type { AnalysisResult, Verdict } from "../types";
+import type { AnalysisResult, FoodType, Verdict } from "../types";
 import NutrientList from "./NutrientList";
 
 const verdictStyle: Record<Verdict, string> = {
@@ -6,6 +6,18 @@ const verdictStyle: Record<Verdict, string> = {
   moderate: "bg-amber-100 text-amber-800",
   unhealthy: "bg-rose-100 text-rose-800",
 };
+
+function VegDot({ type }: { type: FoodType }) {
+  if (type === "unknown") return null;
+  const veg = type === "veg";
+  const color = veg ? "border-green-600 text-green-600" : "border-red-600 text-red-600";
+  return (
+    <span className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs font-semibold ${color}`}>
+      <span className={`inline-block h-2.5 w-2.5 rounded-full ${veg ? "bg-green-600" : "bg-red-600"}`} />
+      {veg ? "Veg" : "Non-veg"}
+    </span>
+  );
+}
 
 function List({ title, items, marker }: { title: string; items: string[]; marker: string }) {
   if (!items.length) return null;
@@ -46,6 +58,35 @@ export default function AnalysisCard({ result }: { result: AnalysisResult }) {
       </div>
 
       <p className="text-slate-600">{result.summary}</p>
+
+      {(result.food_type !== "unknown" || result.allergens.length > 0 || result.diet_tags.length > 0) && (
+        <div className="flex flex-wrap items-center gap-2">
+          <VegDot type={result.food_type} />
+          {result.allergens.map((a) => (
+            <span key={a} className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-medium text-rose-700">
+              ⚠️ {a}
+            </span>
+          ))}
+          {result.diet_tags
+            .filter((d) => d.compatible)
+            .map((d) => (
+              <span key={d.name} className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                ✓ {d.name}
+              </span>
+            ))}
+          {result.diet_tags
+            .filter((d) => !d.compatible)
+            .map((d) => (
+              <span key={d.name} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-400 line-through">
+                {d.name}
+              </span>
+            ))}
+        </div>
+      )}
+
+      {result.allergens.length === 0 && result.has_ingredients && (
+        <p className="text-xs text-slate-400">No major allergens detected in the listed ingredients.</p>
+      )}
 
       {result.missing_info.length > 0 && (
         <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
