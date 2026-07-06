@@ -1,22 +1,28 @@
 # NutriScan 🥗
 
-A web app that analyzes food products from photos and answers food questions using AI (Google Gemini).
+A web app that analyzes food products from photos, answers food questions, and tracks what you eat against personalized daily targets — using AI (Google Gemini) for reading labels and giving advice.
 
-## Features (v1)
+> **Design principle:** AI reads labels and writes advice, but it **never invents health-critical numbers**. All targets, scores, intake math, and recommendations are computed by validated formulas / deterministic rules. The AI is always handed the exact numbers and asked only to explain them.
+
+## Features
 
 - **Scan a product** — upload or capture **multiple images** of a food label (front, ingredients, nutrition table). Gemini merges them and returns:
-  - Healthy / moderate / unhealthy verdict + a 0–100 score
+  - Healthy / moderate / unhealthy verdict + a 0–100 score (the score is **recomputed deterministically** from the read nutrients, so it's stable)
   - Pros, cons, and actionable tips
-  - **Daily-needs coverage** — % of an adult's recommended daily intake each nutrient provides
-  - Recommended serving size and max-per-day guidance
-  - Barcode & product name (captured now; DB lookup planned)
+  - **Daily-needs coverage** — % of recommended daily intake each nutrient provides
+  - Allergen / veg / diet-tag badges + trans-fat / palm-oil / ultra-processed flags
+  - Recommended serving size, max-per-day, and whole-pack impact (if you give the pack weight)
   - `missing_info` hints so you know when to add another photo
 - **Ask** — free-form food questions ("What does an apple contain?"), with a graceful whole-food fallback and optional image attachment.
+- **Accounts & profiles** — register / log in (JWT); set age, sex, height, weight, activity level, and goal to get **personalized daily nutrition targets** (calories via Mifflin–St Jeor + RDA-derived macros) instead of the generic adult baseline. AI *guidance* is grounded in those exact numbers (it never invents figures). When signed in, Scan/Ask tips are tailored to your targets.
+- **Food-database lookup** — search Open Food Facts by name or barcode (or cross-check a scanned barcode). Country-aware, with explicit caveats: the same barcode can differ by region or change over time, so results are a hint to verify against the physical label — never a silent override.
+- **Consumption tracking** — tap “I ate this” on a scan to log it against your daily targets. Before logging, a deterministic **“should I eat this?”** check tells you whether it fills what you still need or pushes you over a limit, plus general feedback on the product. A **Today** dashboard shows an overall achievement %, per-nutrient progress (consumed / remaining / over), logged items (with undo), and a 7-day history. All the intake math is rule-based — the AI never guesses the numbers.
 
 ## Tech stack
 
-- **Backend:** FastAPI + `google-genai`, structured (JSON-schema) output validated by Pydantic
+- **Backend:** FastAPI + `google-genai` (structured JSON-schema output validated by Pydantic), SQLAlchemy + SQLite, JWT auth, `httpx`
 - **Frontend:** React + Vite + TypeScript + Tailwind CSS
+- **Resilience:** Gemini calls fail over across a configurable model chain on rate-limit / overload (429 / 5xx)
 
 ## Prerequisites
 
@@ -49,30 +55,61 @@ npm run dev
 
 Frontend runs at http://localhost:5173 and proxies `/api` to the backend.
 
+## API endpoints
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `POST` | `/api/analyze` | optional | Scan product image(s) → analysis (personalized when logged in) |
+| `POST` | `/api/ask` | optional | Free-form food question |
+| `POST` | `/api/auth/register`, `/api/auth/login` | — | Create account / log in (JWT) |
+| `GET`  | `/api/auth/me` | ✓ | Current user |
+| `GET`/`PUT` | `/api/profile` | ✓ | Read / update profile |
+| `GET`  | `/api/profile/targets` | ✓ | Personalized daily targets (Mifflin–St Jeor + RDA) |
+| `GET`  | `/api/profile/guidance` | ✓ | AI guidance grounded in those exact targets |
+| `GET`  | `/api/lookup/barcode/{code}`, `/api/lookup/search` | — | Open Food Facts lookup (country-aware, caveat-first) |
+| `POST` | `/api/consumption/preview` | ✓ | "Should I eat this?" vs. what's left of the day |
+| `POST` | `/api/consumption/log` | ✓ | Record an item, return updated day |
+| `GET`  | `/api/consumption/today` | ✓ | Today's progress + entries |
+| `GET`  | `/api/consumption/history` | ✓ | Per-day achievement (last N days) |
+| `DELETE` | `/api/consumption/{id}` | ✓ | Undo an entry |
+
 ## Project structure
 
 ```
 fitness/
 ├── backend/
 │   └── app/
-│       ├── main.py            # FastAPI app + CORS + /health
-│       ├── config.py          # env / API key
-│       ├── schemas.py         # Pydantic models (= Gemini output schema)
-│       ├── prompts.py         # system + task prompts
-│       ├── routers/           # /api/analyze, /api/ask
-│       └── services/gemini.py # all Gemini calls
+│       ├── main.py             # FastAPI app + CORS + lifespan (DB init) + /health
+│       ├── config.py           # env / API key / DB / JWT / model-failover settings
+│       ├── db.py               # SQLAlchemy engine, session, Base (shared)
+│       ├── security.py         # password hashing (bcrypt) + JWT
+│       ├── deps.py             # get_current_user / get_current_user_optional
+│       ├── models/             # ORM: user.py (User, Profile), consumption.py (ConsumptionLog)
+│       ├── schemas.py          # Gemini output schemas (analysis, ask, guidance, serving nutrition)
+│       ├── auth_schemas.py     # auth / profile / targets DTOs
+│       ├── lookup_schemas.py   # Open Food Facts DTOs
+│       ├── consumption_schemas.py
+│       ├── prompts.py          # system + task prompts
+│       ├── routers/            # analyze, ask, auth, profile, lookup, consumption
+│       └── services/           # gemini.py (AI + failover), nutrition.py (targets),
+│                               #   openfoodfacts.py (lookup), consumption.py (intake engine)
 └── frontend/
     └── src/
-        ├── App.tsx            # Scan / Ask tabs
-        ├── api.ts, types.ts
-        ├── pages/             # Scan, Ask
-        └── components/        # ImagePicker, AnalysisCard, NutrientList
+        ├── App.tsx             # Scan / Ask / Lookup / Today / Profile tabs
+        ├── AuthContext.tsx     # global auth state
+        ├── api.ts, auth.ts, consumption.ts, types.ts
+        ├── pages/              # Scan, Ask, Lookup, Today, Login, Profile
+        └── components/         # ImagePicker, AnalysisCard, NutrientList,
+                                #   ProductLookupCard, ConsumePanel
 ```
 
-## Roadmap (later)
+## Roadmap
 
-- Login + user profiles (personalized daily needs)
-- Barcode + food-name lookup via a food database (e.g. Open Food Facts)
-- Consumption tracking: who ate what, intake averages, consumed vs. remaining
-- Food suggestions based on local availability and past consumption
+See `TODO.md` for the full backlog.
+
+- ✅ Login + user profiles (personalized daily needs), wired into scan/ask
+- ✅ AI target guidance grounded in the computed numbers
+- ✅ Barcode + food-name lookup via Open Food Facts (country-aware, caveat-first)
+- ✅ Consumption tracking: log intake, consumed vs. remaining, daily achievement % + history
+- ⬜ Food suggestions based on remaining daily gaps, local availability, and past consumption
 ```

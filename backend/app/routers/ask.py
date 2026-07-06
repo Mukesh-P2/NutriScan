@@ -1,9 +1,12 @@
 """POST /api/ask — free-form food question, with optional supporting image."""
 
-from fastapi import APIRouter, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 
+from app.deps import get_current_user_optional
+from app.models.user import User
 from app.schemas import AskResponse
 from app.services import gemini
+from app.services.nutrition import compute_targets, personal_targets_context
 
 router = APIRouter(prefix="/api", tags=["ask"])
 
@@ -11,8 +14,19 @@ MAX_BYTES = 8 * 1024 * 1024
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
 
 
+def _personal_context(user: User | None) -> str | None:
+    if user is None:
+        return None
+    targets = compute_targets(user.profile)
+    return personal_targets_context(targets) if targets.complete else None
+
+
 @router.post("/ask", response_model=AskResponse)
-async def ask(question: str = Form(...), image: UploadFile | None = None) -> AskResponse:
+async def ask(
+    question: str = Form(...),
+    image: UploadFile | None = None,
+    user: User | None = Depends(get_current_user_optional),
+) -> AskResponse:
     question = question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
@@ -29,8 +43,8 @@ async def ask(question: str = Form(...), image: UploadFile | None = None) -> Ask
             image_payload = (data, content_type)
 
     try:
-        return gemini.ask_question(question, image_payload)
+        return gemini.ask_question(question, image_payload, personal_context=_personal_context(user))
+    except gemini.AIServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc))
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"Question failed: {exc}")

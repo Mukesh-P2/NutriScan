@@ -4,6 +4,10 @@ __pycache__/
 *.pyc
 backend/.env
 
+# SQLite database files
+*.db
+backend/*.db
+
 # Node
 frontend/node_modules/
 frontend/dist/

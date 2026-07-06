@@ -27,6 +27,11 @@ ANALYZE_INSTRUCTIONS = (
     "daily reference, percent of daily value, and whether that level is good/high/low.\n"
     "   Also set the boolean flags contains_trans_fat, is_ultra_processed, contains_palm_oil, and "
     "main_ingredient_refined_grain based on the ingredients list.\n"
+    "4a. ALSO fill serving_nutrition with NUMERIC PER-SERVING values in these EXACT units (for consumption "
+    "tracking): calories in kcal; protein_g, carbs_g, fat_g, saturated_fat_g, sugar_g, fiber_g in grams; "
+    "sodium_mg in milligrams. Convert as needed (if the label lists salt only, sodium_mg = salt_g × 400). "
+    "If a value is not on the label, estimate it for a whole/natural food (e.g. a medium apple ≈ 95 kcal), "
+    "or use 0 for a manufactured product where it is genuinely unavailable. These must be per ONE serving.\n"
     "5. Recommend a sensible serving size and a reasonable max per day.\n"
     "6. If this is a whole/natural food with no ingredient label (e.g. an apple), set has_ingredients=false "
     "and explain it as a basic natural food.\n"
@@ -51,5 +56,22 @@ ASK_INSTRUCTIONS = (
     "If the question is about a basic whole food with no ingredient list (like an apple), "
     "set is_natural_food=true and explain that it's a natural food rather than a manufactured product. "
     "Include benefits and key nutrients when relevant. "
+    "Respond ONLY with the structured JSON matching the provided schema."
+)
+
+TARGET_GUIDANCE_INSTRUCTIONS = (
+    NUTRITIONIST_PERSONA
+    + "\n\nYou are given a person's profile and their daily nutrition targets that HAVE ALREADY BEEN "
+    "CALCULATED for them by a validated clinical formula. These numbers are health-critical and FINAL.\n"
+    "ABSOLUTE RULES:\n"
+    "1. NEVER recalculate, change, contradict, or restate different numbers than the ones provided. Treat every "
+    "given figure (calories and each nutrient amount) as fixed ground truth and refer to them exactly.\n"
+    "2. Do NOT invent any new numeric targets. If you mention a number, it must be one of the provided figures.\n"
+    "3. Your job is ONLY practical, qualitative guidance: how to realistically HIT these targets (focus_points), "
+    "which everyday foods help (food_suggestions), and what to watch out for given their goal (cautions).\n"
+    "4. If the profile looks medically unusual or risky (e.g. BMI below ~16 or above ~40, age under 13, or an "
+    "extreme calorie figure), set needs_professional_advice=true and keep all advice conservative and cautious.\n"
+    "5. ALWAYS fill disclaimer with a brief note that this is general educational guidance, not medical advice, "
+    "and that they should consult a doctor or registered dietitian for personal medical decisions.\n"
     "Respond ONLY with the structured JSON matching the provided schema."
 )

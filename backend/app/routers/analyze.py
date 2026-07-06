@@ -1,11 +1,22 @@
 """POST /api/analyze — scan one or more images of a food product."""
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
+from app.deps import get_current_user_optional
+from app.models.user import User
 from app.schemas import AnalysisResult
 from app.services import gemini
+from app.services.nutrition import compute_targets, personal_targets_context
 
 router = APIRouter(prefix="/api", tags=["analyze"])
+
+
+def _personal_context(user: User | None) -> str | None:
+    """Personalize only when a user is logged in AND their profile is complete."""
+    if user is None:
+        return None
+    targets = compute_targets(user.profile)
+    return personal_targets_context(targets) if targets.complete else None
 
 MAX_IMAGES = 6
 MAX_BYTES = 8 * 1024 * 1024  # 8 MB per image
@@ -16,6 +27,7 @@ ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/h
 async def analyze(
     images: list[UploadFile] = File(...),
     total_weight: str | None = Form(None),
+    user: User | None = Depends(get_current_user_optional),
 ) -> AnalysisResult:
     if not images:
         raise HTTPException(status_code=400, detail="At least one image is required.")
@@ -35,8 +47,12 @@ async def analyze(
         payload.append((data, content_type))
 
     try:
-        return gemini.analyze_images(payload, total_weight=(total_weight or "").strip() or None)
+        return gemini.analyze_images(
+            payload,
+            total_weight=(total_weight or "").strip() or None,
+            personal_context=_personal_context(user),
+        )
+    except gemini.AIServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc))
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
-    except Exception as exc:  # noqa: BLE001 - surface a clean error to the client
-        raise HTTPException(status_code=502, detail=f"Analysis failed: {exc}")

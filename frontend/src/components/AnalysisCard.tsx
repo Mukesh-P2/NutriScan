@@ -1,5 +1,9 @@
-import type { AnalysisResult, FoodType, Verdict } from "../types";
+import { useState } from "react";
+import type { AnalysisResult, FoodType, ProductLookup, Verdict } from "../types";
+import { lookupBarcode } from "../api";
 import NutrientList from "./NutrientList";
+import ProductLookupCard from "./ProductLookupCard";
+import ConsumePanel from "./ConsumePanel";
 
 const verdictStyle: Record<Verdict, string> = {
   healthy: "bg-emerald-100 text-emerald-800",
@@ -37,7 +41,25 @@ function List({ title, items, marker }: { title: string; items: string[]; marker
 }
 
 export default function AnalysisCard({ result }: { result: AnalysisResult }) {
+  const [dbProduct, setDbProduct] = useState<ProductLookup | null>(null);
+  const [dbLoading, setDbLoading] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
+
+  async function lookUp() {
+    if (!result.barcode) return;
+    setDbLoading(true);
+    setDbError(null);
+    try {
+      setDbProduct(await lookupBarcode(result.barcode));
+    } catch (e) {
+      setDbError(e instanceof Error ? e.message : "Lookup failed.");
+    } finally {
+      setDbLoading(false);
+    }
+  }
+
   return (
+    <>
     <div className="space-y-5 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -125,6 +147,38 @@ export default function AnalysisCard({ result }: { result: AnalysisResult }) {
           <p>{result.whole_pack_context}</p>
         </div>
       )}
+
+      <ConsumePanel
+        productName={result.product_name}
+        verdict={result.verdict}
+        score={result.score}
+        nutrition={result.serving_nutrition}
+      />
+
+      {result.barcode && !dbProduct && (
+        <div className="border-t border-slate-100 pt-4">
+          <button
+            onClick={lookUp}
+            disabled={dbLoading}
+            className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-50"
+          >
+            {dbLoading ? "Looking up…" : "🔎 Look up barcode in food database"}
+          </button>
+          <p className="mt-1 text-xs text-slate-400">
+            Cross-check with Open Food Facts. Your scanned label stays the source of truth — database
+            data can differ by country or be out of date.
+          </p>
+          {dbError && <p className="mt-2 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{dbError}</p>}
+        </div>
+      )}
     </div>
+
+    {dbProduct && (
+      <div className="mt-4">
+        <p className="mb-2 text-sm font-semibold text-slate-500">Database cross-check</p>
+        <ProductLookupCard product={dbProduct} />
+      </div>
+    )}
+    </>
   );
 }

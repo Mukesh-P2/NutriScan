@@ -37,6 +37,23 @@ class Nutrient(BaseModel):
     status: NutrientStatus = Field(description="good = healthy level, high = too much, low = little, neutral")
 
 
+class ServingNutrition(BaseModel):
+    """Numeric per-serving values in fixed canonical units, used for consumption tracking.
+
+    Separate from the string `key_nutrients` (which drive the display + score) so the tracker
+    has clean, unit-consistent numbers to add/subtract against daily targets. 0 when not known.
+    """
+
+    calories: float = Field(default=0, description="Energy per serving, in kcal")
+    protein_g: float = Field(default=0, description="Protein per serving, in grams")
+    carbs_g: float = Field(default=0, description="Total carbohydrate per serving, in grams")
+    fat_g: float = Field(default=0, description="Total fat per serving, in grams")
+    saturated_fat_g: float = Field(default=0, description="Saturated fat per serving, in grams")
+    sugar_g: float = Field(default=0, description="Total sugars per serving, in grams")
+    fiber_g: float = Field(default=0, description="Dietary fiber per serving, in grams")
+    sodium_mg: float = Field(default=0, description="Sodium per serving, in mg (if only salt is listed, sodium_mg = salt_g x 400)")
+
+
 class AnalysisResult(BaseModel):
     """The structured verdict returned for a scanned food product."""
 
@@ -49,6 +66,10 @@ class AnalysisResult(BaseModel):
     cons: list[str] = Field(default_factory=list)
     tips: list[str] = Field(default_factory=list, description="Actionable tips for the consumer")
     key_nutrients: list[Nutrient] = Field(default_factory=list)
+    serving_nutrition: ServingNutrition = Field(
+        default_factory=ServingNutrition,
+        description="Numeric per-serving nutrition in canonical units, for consumption tracking",
+    )
     recommended_serving: str = Field(description="Sensible serving size, e.g. '≈30g per serving'")
     max_per_day: str = Field(description="Upper guidance, e.g. 'up to 2 servings'")
     daily_context_note: str = Field(description="Baseline assumption, e.g. 'Assumes a typical adult (~2000 kcal/day).'")
@@ -103,3 +124,28 @@ class AskResponse(BaseModel):
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
+
+
+class TargetGuidance(BaseModel):
+    """AI guidance grounded in ALREADY-COMPUTED daily targets.
+
+    The numeric targets come from a validated formula (Mifflin–St Jeor + guideline splits),
+    NOT from the model. The model only advises around those fixed numbers — it must never
+    invent or change them. This keeps the health-critical figures deterministic.
+    """
+
+    summary: str = Field(description="2-3 sentence personalized overview that references the given targets")
+    focus_points: list[str] = Field(
+        default_factory=list, description="Concrete, practical ways to hit the given calorie/macro targets"
+    )
+    food_suggestions: list[str] = Field(
+        default_factory=list, description="Specific everyday foods that help meet the targets"
+    )
+    cautions: list[str] = Field(
+        default_factory=list, description="Things to watch given the user's goal (e.g. don't undereat protein)"
+    )
+    needs_professional_advice: bool = Field(
+        default=False,
+        description="True if the profile looks medically unusual (very low/high BMI, very young, etc.)",
+    )
+    disclaimer: str = Field(description="Short note that this is general guidance, not medical advice")
