@@ -57,6 +57,38 @@ npm run dev
 
 Frontend runs at http://localhost:5173 and proxies `/api` to the backend.
 
+## Using the app — feature walkthrough
+
+NutriScan is organised into tabs across the top. Most features work logged-out; **tracking and personalization need an account**.
+
+### 🔍 Scan  *(the main feature)*
+1. On the **Scan** tab, add one or more photos of a food label — front, ingredients list, nutrition table (multiple angles are merged into one analysis).
+2. *(Optional)* Enter the **total pack weight** (e.g. `90g`) to also get whole-pack impact and how much to eat.
+3. Click **Analyze** → verdict (healthy / moderate / unhealthy), a 0–100 score, pros / cons / tips, per-nutrient daily-needs coverage, allergen / veg / diet badges, and processing flags.
+4. If a barcode is visible it's **auto cross-checked** against Open Food Facts and shown as a hint below (your scanned label stays the source of truth).
+5. Use **🔗 Share / copy** or **⬇ Download .txt** to export the result.
+6. Every scan is saved under **Recent scans** (on this device) — click one to reopen it, or ✕ to remove.
+
+### 💬 Ask
+Type any food question ("Is oat milk healthy?", "What's in an apple?") and optionally attach a photo. Whole foods get a natural-food explanation.
+
+### 🗄️ Lookup
+Search **Open Food Facts** by product **name** or **barcode**; add a country to bias to your region. Results lead with caveats (region / freshness) — always verify against the physical label. When logged in, use **Eat this?** on a result to log it to today (database values are per 100 g; set servings to your portion, e.g. `1.5` = 150 g).
+
+### ⚖️ Compare
+Pick any **two of your past scans** to see scores and per-serving nutrients side by side — the healthier value in each row is highlighted (more protein / fiber, less sugar / saturated fat / sodium).
+
+### 👤 Log in & Profile
+Register or log in (top-right tab). On **Profile**, fill age, sex, height, weight, activity level and goal to unlock **personalized daily targets** (calories via Mifflin–St Jeor + RDA macros) and **AI guidance** grounded in those exact numbers. Signed-in users also get Scan / Ask tips tailored to their targets.
+
+### 📊 Today  *(tracking + suggestions — needs login + a complete profile)*
+- **Log food:** on any Scan or Lookup result open **Eat this?**, set servings, optionally **Check today's fit** ("should I eat this?"), then **✓ I ate this**.
+- The dashboard shows your **achievement ring**, per-nutrient **progress bars** (consumed / remaining / over), **logged items** (with Undo), a **7-day history**, and **This week's averages**.
+- **What should I eat next?** suggests specific foods to fill what's *left* of today (optionally by country). The remaining gaps are computed exactly; the AI only picks the foods.
+
+### Header badge
+The pill next to the logo shows the active AI model chain (green = ready, amber = key missing, grey = backend down). Hover for the full failover chain.
+
 ## API endpoints
 
 | Method | Path | Auth | Purpose |
@@ -108,6 +140,30 @@ fitness/
         └── components/         # ImagePicker, AnalysisCard, NutrientList, ProductLookupCard,
                                 #   ConsumePanel, SuggestionsPanel, HealthBadge, ErrorNotice
 ```
+
+## Production readiness
+
+NutriScan is a **fully working prototype / MVP**, not yet production-hardened. Before a public deploy:
+
+**Security & config**
+- Set a strong `JWT_SECRET` (default is `dev-secret-change-me`); keep `GEMINI_API_KEY` server-side only.
+- Lock `CORS_ORIGINS` to your real frontend origin and serve over HTTPS.
+- Add **rate limiting** per IP/user — the free-tier Gemini key is otherwise easy to exhaust.
+
+**Data & scale**
+- Swap SQLite for **Postgres** (`DATABASE_URL`) and add migrations (e.g. Alembic) — there's no migration tooling yet, so schema changes need care.
+- The Open Food Facts cache is **in-memory per process**; use a shared cache (e.g. Redis) across multiple instances.
+- The day boundary is **app-global** (`APP_TIMEZONE`), not per user.
+
+**Quality & ops**
+- **No automated tests yet** — add pytest for the routers + a mocked Gemini client (the biggest gap).
+- Add structured logging + request IDs, error tracking, and a `Dockerfile` / compose for one-command deploy.
+- Build the frontend (`npm run build`) and serve `dist/` from static hosting / a CDN pointed at the API.
+
+**Product caveat**
+- AI label OCR can misread; scores and targets stay deterministic, but users should always verify against the physical label (the UI says so).
+
+**Verdict:** great for demos, personal use, and pilots — complete the checklist above for a public production launch.
 
 ## Roadmap
 
