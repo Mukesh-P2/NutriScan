@@ -128,7 +128,7 @@ export default function Lookup() {
               ← Back to results
             </button>
           )}
-          <ProductLookupCard product={product} />
+          <ProductLookupCard product={product} allowConsume />
         </div>
       )}
     </div>

@@ -1,8 +1,17 @@
 import type { ProductLookup } from "../types";
+import { servingFromLookup } from "../offNutrition";
+import ConsumePanel from "./ConsumePanel";
 
 // Renders a food-database result. Caveats are shown FIRST and prominently — the whole point
 // is that this data is a hint to verify, not authoritative (region/formulation can differ).
-export default function ProductLookupCard({ product }: { product: ProductLookup }) {
+// `allowConsume` opts into a "log this to today" panel (used on the Lookup tab).
+export default function ProductLookupCard({
+  product,
+  allowConsume = false,
+}: {
+  product: ProductLookup;
+  allowConsume?: boolean;
+}) {
   if (!product.found) {
     return (
       <div className="rounded-2xl bg-white p-6 text-sm text-slate-500 shadow-sm ring-1 ring-slate-200">
@@ -11,6 +20,8 @@ export default function ProductLookupCard({ product }: { product: ProductLookup 
       </div>
     );
   }
+
+  const consumeNutrition = allowConsume ? servingFromLookup(product) : null;
 
   return (
     <div className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
@@ -74,6 +85,19 @@ export default function ProductLookupCard({ product }: { product: ProductLookup 
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {consumeNutrition && (
+        <div className="border-t border-slate-100 pt-4">
+          <p className="text-xs text-slate-500">
+            Log this from the database values. Numbers are <b>per 100&nbsp;g</b> — set servings to your
+            portion in 100&nbsp;g units (e.g. 1.5 = 150&nbsp;g). Always verify against the label.
+          </p>
+          <ConsumePanel
+            productName={product.product_name || "Database product"}
+            nutrition={consumeNutrition}
+          />
         </div>
       )}
 

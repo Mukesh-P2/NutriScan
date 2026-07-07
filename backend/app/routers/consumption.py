@@ -7,7 +7,7 @@ history  → per-day achievement for the last N days
 DELETE   → undo an entry
 """
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -20,12 +20,14 @@ from app.consumption_schemas import (
     DailyProgress,
     DaySummary,
     HistoryResponse,
+    WeeklyAverages,
 )
 from app.db import get_db
 from app.deps import get_current_user
 from app.models.consumption import ConsumptionLog
 from app.models.user import User
-from app.services import consumption as engine
+from app.schemas import FoodSuggestions
+from app.services import consumption as engine, gemini, suggestions as suggestions_service
 from app.services.nutrition import compute_targets
 
 router = APIRouter(prefix="/api/consumption", tags=["consumption"])
@@ -34,7 +36,7 @@ _NUTRIENT_KEYS = ("calories", "protein_g", "carbs_g", "fat_g", "saturated_fat_g"
 
 
 def _today() -> date:
-    return datetime.now(timezone.utc).date()
+    return engine.local_today()
 
 
 def _logs_for(db: Session, user_id: int, day) -> list[ConsumptionLog]:
@@ -137,3 +139,50 @@ def history(days: int = Query(7, ge=1, le=31), current: User = Depends(get_curre
             )
         )
     return HistoryResponse(days=summaries)
+
+
+@router.get("/weekly", response_model=WeeklyAverages)
+def weekly(
+    days: int = Query(7, ge=1, le=31),
+    current: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> WeeklyAverages:
+    """Average daily intake + achievement over the last N days (unlogged days count as 0)."""
+    targets = compute_targets(current.profile)
+    end = _today()
+    start = end - timedelta(days=days - 1)
+
+    stmt = select(ConsumptionLog).where(
+        ConsumptionLog.user_id == current.id,
+        ConsumptionLog.day >= start,
+        ConsumptionLog.day <= end,
+    )
+    by_day: dict = {}
+    for log in db.scalars(stmt):
+        by_day.setdefault(log.day, []).append(log)
+
+    daily = [_sum_consumed(by_day.get(start + timedelta(days=i), [])) for i in range(days)]
+    days_logged = sum(1 for i in range(days) if by_day.get(start + timedelta(days=i)))
+    return engine.weekly_averages(targets, daily, days_logged)
+
+
+@router.get("/suggestions", response_model=FoodSuggestions)
+def suggestions(
+    country: str | None = Query(None, description="Optional country for locally available foods"),
+    current: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> FoodSuggestions:
+    """AI foods to fill what's LEFT of today's targets. Gaps are computed deterministically here;
+    the model only picks foods (it never restates the numbers)."""
+    logs = _logs_for(db, current.id, _today())
+    targets = compute_targets(current.profile)
+    consumed = _sum_consumed(logs)
+    progress = engine.daily_progress(targets, consumed, [_entry(x) for x in logs])
+    recent = [log.product_name for log in logs]
+    goal = current.profile.goal.value if current.profile and current.profile.goal else None
+    try:
+        return suggestions_service.suggest(progress, country=country, goal=goal, recent_foods=recent)
+    except gemini.AIServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))

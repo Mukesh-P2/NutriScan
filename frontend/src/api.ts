@@ -1,4 +1,4 @@
-import type { AnalysisResult, AskResponse, ProductLookup, ProductSearchResults } from "./types";
+import type { AnalysisResult, AskResponse, Health, ProductLookup, ProductSearchResults } from "./types";
 import { tokenStore } from "./auth";
 
 async function parseError(res: Response): Promise<string> {
@@ -48,6 +48,13 @@ export async function searchProducts(q: string, country?: string): Promise<Produ
   const params = new URLSearchParams({ q });
   if (country) params.set("country", country);
   const res = await fetch(`/api/lookup/search?${params}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+// Service health — public, no auth. Powers the header model-chain badge.
+export async function fetchHealth(): Promise<Health> {
+  const res = await fetch("/health");
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }

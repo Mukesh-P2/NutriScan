@@ -22,8 +22,8 @@ export default function ConsumePanel({
   nutrition,
 }: {
   productName: string;
-  verdict: Verdict;
-  score: number;
+  verdict?: Verdict;
+  score?: number;
   nutrition: ServingNutrition;
 }) {
   const { user } = useAuth();
@@ -47,8 +47,8 @@ export default function ConsumePanel({
     product_name: productName,
     servings,
     nutrition,
-    product_verdict: verdict,
-    product_score: score,
+    product_verdict: verdict ?? null,
+    product_score: score ?? null,
   });
 
   async function check() {

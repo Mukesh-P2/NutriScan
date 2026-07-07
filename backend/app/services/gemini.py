@@ -7,8 +7,13 @@ from google.genai import errors, types
 from pydantic import BaseModel
 
 from app.config import settings
-from app.prompts import ANALYZE_INSTRUCTIONS, ASK_INSTRUCTIONS, TARGET_GUIDANCE_INSTRUCTIONS
-from app.schemas import AnalysisResult, AskResponse, TargetGuidance, Verdict
+from app.prompts import (
+    ANALYZE_INSTRUCTIONS,
+    ASK_INSTRUCTIONS,
+    FOOD_SUGGESTIONS_INSTRUCTIONS,
+    TARGET_GUIDANCE_INSTRUCTIONS,
+)
+from app.schemas import AnalysisResult, AskResponse, FoodSuggestions, TargetGuidance, Verdict
 
 _client: genai.Client | None = None
 
@@ -197,3 +202,15 @@ def target_guidance(facts: str) -> TargetGuidance:
     ]
     response = _generate(parts, TargetGuidance)
     return TargetGuidance.model_validate_json(response.text)
+
+
+def suggest_foods(facts: str) -> FoodSuggestions:
+    """Suggest foods that fill the day's REMAINING gaps. `facts` carries the fixed remaining
+    numbers verbatim; the model picks foods but must not change the numbers
+    (see FOOD_SUGGESTIONS_INSTRUCTIONS)."""
+    parts: list[types.Part] = [
+        types.Part.from_text(text=FOOD_SUGGESTIONS_INSTRUCTIONS),
+        types.Part.from_text(text=facts),
+    ]
+    response = _generate(parts, FoodSuggestions)
+    return FoodSuggestions.model_validate_json(response.text)

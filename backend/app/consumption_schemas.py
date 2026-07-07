@@ -86,3 +86,15 @@ class DaySummary(BaseModel):
 
 class HistoryResponse(BaseModel):
     days: list[DaySummary]
+
+
+class WeeklyAverages(BaseModel):
+    """Average daily intake over a rolling window (deterministic; unlogged days count as 0)."""
+
+    days: int = Field(description="Window size in days")
+    days_logged: int = Field(description="Days in the window with at least one logged item")
+    targets_complete: bool = Field(description="False if profile incomplete; targets are generic defaults")
+    avg_achievement_pct: int = Field(description="Mean daily achievement % across the window")
+    avg_calories: float = Field(description="Mean daily calories consumed across the window")
+    calories_target: int
+    nutrients: list[NutrientProgress] = Field(description="Per-nutrient average consumed vs. target")

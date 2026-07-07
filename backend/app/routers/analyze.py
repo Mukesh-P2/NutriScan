@@ -1,11 +1,12 @@
 """POST /api/analyze — scan one or more images of a food product."""
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 
 from app.deps import get_current_user_optional
 from app.models.user import User
-from app.schemas import AnalysisResult
-from app.services import gemini
+from app.schemas import ScanResponse
+from app.services import gemini, openfoodfacts
 from app.services.nutrition import compute_targets, personal_targets_context
 
 router = APIRouter(prefix="/api", tags=["analyze"])
@@ -23,12 +24,13 @@ MAX_BYTES = 8 * 1024 * 1024  # 8 MB per image
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
 
 
-@router.post("/analyze", response_model=AnalysisResult)
+@router.post("/analyze", response_model=ScanResponse)
 async def analyze(
     images: list[UploadFile] = File(...),
     total_weight: str | None = Form(None),
+    cross_check: bool = Form(True),
     user: User | None = Depends(get_current_user_optional),
-) -> AnalysisResult:
+) -> ScanResponse:
     if not images:
         raise HTTPException(status_code=400, detail="At least one image is required.")
     if len(images) > MAX_IMAGES:
@@ -47,7 +49,7 @@ async def analyze(
         payload.append((data, content_type))
 
     try:
-        return gemini.analyze_images(
+        result = gemini.analyze_images(
             payload,
             total_weight=(total_weight or "").strip() or None,
             personal_context=_personal_context(user),
@@ -56,3 +58,15 @@ async def analyze(
         raise HTTPException(status_code=exc.status_code, detail=str(exc))
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+
+    # Best-effort: if a barcode was read, cross-check it against Open Food Facts as a HINT.
+    # Never let a lookup failure fail the scan, and never block the event loop on the sync call.
+    barcode_lookup = None
+    if cross_check and result.barcode and result.barcode.strip().isdigit():
+        try:
+            found = await run_in_threadpool(openfoodfacts.lookup_barcode, result.barcode.strip())
+            barcode_lookup = found if found.found else None
+        except openfoodfacts.LookupError:
+            barcode_lookup = None
+
+    return ScanResponse(**result.model_dump(), barcode_lookup=barcode_lookup)

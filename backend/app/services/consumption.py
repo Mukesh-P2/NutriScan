@@ -10,14 +10,17 @@ module computes:
 Canonical nutrient keys line up 1:1 with NutritionTargets so nothing is parsed from strings.
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
 from app.auth_schemas import NutritionTargets
+from app.config import settings
 from app.consumption_schemas import (
     ConsumptionRecommendation,
     DailyProgress,
     NutrientEffect,
     NutrientProgress,
+    WeeklyAverages,
 )
 from app.schemas import ServingNutrition, Verdict
 
@@ -51,6 +54,20 @@ _GOAL_KEYS = ("calories", "protein_g", "carbs_g", "fat_g", "fiber_g")  # complet
 _LIMIT_KEYS = ("sugar_g", "saturated_fat_g", "sodium_mg")  # overage penalizes progress
 _NEAR_FRACTION = 0.85  # ≥85% of a limit → "getting close"
 _OVER_TOLERANCE = 1.10  # >110% of a limit/budget → serious
+
+
+def local_today() -> date:
+    """Current calendar day in the configured app timezone (falls back to UTC on a bad name).
+
+    This is the single source of "what day is it" for tracking — used at both write time
+    (bucketing a logged item) and read time (today/history/weekly), so the day boundary stays
+    consistent instead of being hardwired to UTC in several places.
+    """
+    try:
+        tz = ZoneInfo(settings.app_timezone)
+    except Exception:
+        tz = timezone.utc
+    return datetime.now(tz).date()
 
 
 def target_values(targets: NutritionTargets) -> dict[str, float]:
@@ -231,11 +248,48 @@ def daily_progress(targets: NutritionTargets, consumed: dict[str, float], entrie
         )
 
     return DailyProgress(
-        date=datetime.now(timezone.utc).date().isoformat(),
+        date=local_today().isoformat(),
         targets_complete=targets.complete,
         achievement_pct=achievement_pct(tvals, consumed),
         calories_consumed=_round(consumed.get("calories", 0.0)),
         calories_target=targets.calories,
         nutrients=nutrients,
         entries=entries,
+    )
+
+
+def weekly_averages(
+    targets: NutritionTargets,
+    daily_consumed: list[dict[str, float]],
+    days_logged: int,
+) -> WeeklyAverages:
+    """Average daily intake over a window. `daily_consumed` has one consumed-dict per day in the
+    window (0-filled for days with no entries), so the average reflects real calendar days."""
+    tvals = target_values(targets)
+    n = len(daily_consumed) or 1
+    avg = {key: sum(day.get(key, 0.0) for day in daily_consumed) / n for key in _META}
+
+    nutrients = []
+    for key, (name, unit, kind) in _META.items():
+        if key == "calories" or not tvals.get(key):
+            continue
+        target = tvals[key]
+        eaten = avg[key]
+        nutrients.append(
+            NutrientProgress(
+                name=name, kind=kind, unit=unit, consumed=_round(eaten), target=_round(target),
+                remaining=_round(target - eaten), percent=round(min(eaten / target, 2.0) * 100),
+                over=eaten > target,
+            )
+        )
+
+    avg_achievement = round(sum(achievement_pct(tvals, day) for day in daily_consumed) / n)
+    return WeeklyAverages(
+        days=len(daily_consumed),
+        days_logged=days_logged,
+        targets_complete=targets.complete,
+        avg_achievement_pct=avg_achievement,
+        avg_calories=_round(avg.get("calories", 0.0)),
+        calories_target=targets.calories,
+        nutrients=nutrients,
     )

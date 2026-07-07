@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     gemini_fallback_models: str = "gemini-2.5-flash,gemini-2.0-flash"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
+    # Day boundary for consumption tracking. IANA timezone name (e.g. "America/New_York");
+    # falls back to UTC if the name is unknown. Determines when "today" rolls over.
+    app_timezone: str = "UTC"
+
     # Persistence (SQLite by default; swap the URL for Postgres in production).
     database_url: str = "sqlite:///./nutriscan.db"
 

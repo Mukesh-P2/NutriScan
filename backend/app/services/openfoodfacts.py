@@ -8,6 +8,7 @@ so the product data is presented as a hint to verify — never as authoritative 
 NOT decide anything for the user or overwrite scanned-label data.
 """
 
+import time
 from datetime import datetime, timezone
 
 import httpx
@@ -39,6 +40,31 @@ _NUTRIMENT_FIELDS = [
     ("Salt", "salt_100g", "g"),
     ("Sodium", "sodium_100g", "g"),
 ]
+
+
+# ---------------------------------------------------------------------------
+# Tiny in-memory TTL cache. OFF data changes slowly and lookups repeat (a user
+# re-scans or re-searches the same item, and scan auto-cross-check hits the same
+# barcodes), so caching cuts latency and API load. Only successful results are
+# cached — transport errors (LookupError) are never cached.
+# ---------------------------------------------------------------------------
+_CACHE_TTL = 3600.0  # seconds (1 hour)
+_cache: dict[tuple, tuple[float, object]] = {}
+
+
+def _cache_get(key: tuple):
+    hit = _cache.get(key)
+    if hit is None:
+        return None
+    stored_at, value = hit
+    if time.monotonic() - stored_at > _CACHE_TTL:
+        _cache.pop(key, None)
+        return None
+    return value
+
+
+def _cache_put(key: tuple, value) -> None:
+    _cache[key] = (time.monotonic(), value)
 
 
 class LookupError(Exception):
@@ -115,6 +141,11 @@ def _extract_nutriments(nutriments: dict) -> list[ProductNutriment]:
 
 def lookup_barcode(barcode: str, country: str | None = None) -> ProductLookup:
     barcode = barcode.strip()
+    cache_key = ("barcode", barcode, (country or "").strip().lower())
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     url = f"{_BASE}/api/v2/product/{barcode}.json"
     try:
         resp = httpx.get(url, headers=_HEADERS, timeout=_TIMEOUT)
@@ -124,17 +155,19 @@ def lookup_barcode(barcode: str, country: str | None = None) -> ProductLookup:
         raise LookupError(f"Could not reach the food database: {exc}") from exc
 
     if data.get("status") != 1 or not data.get("product"):
-        return ProductLookup(
+        not_found = ProductLookup(
             found=False,
             barcode=barcode,
             caveats=["No product found for this barcode in Open Food Facts. Scan the label instead."],
         )
+        _cache_put(cache_key, not_found)
+        return not_found
 
     p = data["product"]
     countries = _prettify_tags(p.get("countries_tags", []))
     last_modified, fresh_caveats = _freshness(p.get("last_modified_t"))
 
-    return ProductLookup(
+    found_product = ProductLookup(
         found=True,
         barcode=barcode,
         product_name=_as_text(p.get("product_name")),
@@ -148,10 +181,16 @@ def lookup_barcode(barcode: str, country: str | None = None) -> ProductLookup:
         source_url=f"{_BASE}/product/{barcode}",
         caveats=_base_caveats() + _country_caveats(countries, country) + fresh_caveats,
     )
+    _cache_put(cache_key, found_product)
+    return found_product
 
 
 def search_products(query: str, country: str | None = None, page_size: int = 10) -> ProductSearchResults:
     query = query.strip()
+    cache_key = ("search", query.lower(), (country or "").strip().lower(), page_size)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     # Search-a-licious accepts a Lucene-style query; scope by country tag when given.
     q = query
     if country:
@@ -190,10 +229,12 @@ def search_products(query: str, country: str | None = None, page_size: int = 10)
         "region's version of a product. Pick the match whose brand/country fits what you have, "
         "then confirm against the physical label.",
     ]
-    return ProductSearchResults(
+    search_results = ProductSearchResults(
         query=query,
         country_filter=country,
         count=len(results),
         results=results,
         caveats=caveats,
     )
+    _cache_put(cache_key, search_results)
+    return search_results

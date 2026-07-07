@@ -16,7 +16,9 @@ A web app that analyzes food products from photos, answers food questions, and t
 - **Ask** — free-form food questions ("What does an apple contain?"), with a graceful whole-food fallback and optional image attachment.
 - **Accounts & profiles** — register / log in (JWT); set age, sex, height, weight, activity level, and goal to get **personalized daily nutrition targets** (calories via Mifflin–St Jeor + RDA-derived macros) instead of the generic adult baseline. AI *guidance* is grounded in those exact numbers (it never invents figures). When signed in, Scan/Ask tips are tailored to your targets.
 - **Food-database lookup** — search Open Food Facts by name or barcode (or cross-check a scanned barcode). Country-aware, with explicit caveats: the same barcode can differ by region or change over time, so results are a hint to verify against the physical label — never a silent override.
-- **Consumption tracking** — tap “I ate this” on a scan to log it against your daily targets. Before logging, a deterministic **“should I eat this?”** check tells you whether it fills what you still need or pushes you over a limit, plus general feedback on the product. A **Today** dashboard shows an overall achievement %, per-nutrient progress (consumed / remaining / over), logged items (with undo), and a 7-day history. All the intake math is rule-based — the AI never guesses the numbers.
+- **Consumption tracking** — tap “I ate this” on a scan (or a database lookup) to log it against your daily targets. Before logging, a deterministic **“should I eat this?”** check tells you whether it fills what you still need or pushes you over a limit, plus general feedback on the product. A **Today** dashboard shows an overall achievement %, per-nutrient progress (consumed / remaining / over), logged items (with undo), a 7-day history, and **weekly averages**. All the intake math is rule-based — the AI never guesses the numbers.
+- **Food suggestions** — “What should I eat next?” recommends specific foods to fill what's *left* of today. The remaining gaps are computed deterministically (targets − intake); the AI only picks foods, factoring in an optional country (local availability) and the foods you've already eaten (variety). The day boundary is timezone-aware (`APP_TIMEZONE`).
+- **Scan history, compare & share** — recent scans are saved on your device (works logged-out); open any two in the **Compare** tab to line up scores and nutrients side by side, or share/export a result (native share, clipboard, or `.txt`). A header badge shows the active AI model chain.
 
 ## Tech stack
 
@@ -59,7 +61,7 @@ Frontend runs at http://localhost:5173 and proxies `/api` to the backend.
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| `POST` | `/api/analyze` | optional | Scan product image(s) → analysis (personalized when logged in) |
+| `POST` | `/api/analyze` | optional | Scan image(s) → analysis + auto barcode cross-check (personalized when logged in) |
 | `POST` | `/api/ask` | optional | Free-form food question |
 | `POST` | `/api/auth/register`, `/api/auth/login` | — | Create account / log in (JWT) |
 | `GET`  | `/api/auth/me` | ✓ | Current user |
@@ -71,7 +73,10 @@ Frontend runs at http://localhost:5173 and proxies `/api` to the backend.
 | `POST` | `/api/consumption/log` | ✓ | Record an item, return updated day |
 | `GET`  | `/api/consumption/today` | ✓ | Today's progress + entries |
 | `GET`  | `/api/consumption/history` | ✓ | Per-day achievement (last N days) |
+| `GET`  | `/api/consumption/weekly` | ✓ | Weekly averages — avg intake + achievement |
+| `GET`  | `/api/consumption/suggestions` | ✓ | AI foods to fill today's remaining gaps |
 | `DELETE` | `/api/consumption/{id}` | ✓ | Undo an entry |
+| `GET`  | `/health` | — | Status + active Gemini model chain |
 
 ## Project structure
 
@@ -80,7 +85,7 @@ fitness/
 ├── backend/
 │   └── app/
 │       ├── main.py             # FastAPI app + CORS + lifespan (DB init) + /health
-│       ├── config.py           # env / API key / DB / JWT / model-failover settings
+│       ├── config.py           # env / API key / DB / JWT / model-failover / timezone settings
 │       ├── db.py               # SQLAlchemy engine, session, Base (shared)
 │       ├── security.py         # password hashing (bcrypt) + JWT
 │       ├── deps.py             # get_current_user / get_current_user_optional
@@ -90,17 +95,18 @@ fitness/
 │       ├── lookup_schemas.py   # Open Food Facts DTOs
 │       ├── consumption_schemas.py
 │       ├── prompts.py          # system + task prompts
-│       ├── routers/            # analyze, ask, auth, profile, lookup, consumption
-│       └── services/           # gemini.py (AI + failover), nutrition.py (targets),
-│                               #   openfoodfacts.py (lookup), consumption.py (intake engine)
+│       ├── routers/            # analyze, ask, auth, profile, lookup, consumption (+ weekly, suggestions)
+│       └── services/           # gemini.py (AI + failover), nutrition.py (targets), openfoodfacts.py
+│                               #   (lookup + cache), consumption.py (intake engine), suggestions.py
 └── frontend/
     └── src/
-        ├── App.tsx             # Scan / Ask / Lookup / Today / Profile tabs
+        ├── App.tsx             # Scan / Ask / Lookup / Compare / Today / Profile tabs
         ├── AuthContext.tsx     # global auth state
         ├── api.ts, auth.ts, consumption.ts, types.ts
-        ├── pages/              # Scan, Ask, Lookup, Today, Login, Profile
-        └── components/         # ImagePicker, AnalysisCard, NutrientList,
-                                #   ProductLookupCard, ConsumePanel
+        ├── scanHistory.ts, shareResult.ts, offNutrition.ts   # localStorage history, share, OFF→serving
+        ├── pages/              # Scan, Ask, Lookup, Compare, Today, Login, Profile
+        └── components/         # ImagePicker, AnalysisCard, NutrientList, ProductLookupCard,
+                                #   ConsumePanel, SuggestionsPanel, HealthBadge, ErrorNotice
 ```
 
 ## Roadmap
@@ -110,6 +116,7 @@ See `TODO.md` for the full backlog.
 - ✅ Login + user profiles (personalized daily needs), wired into scan/ask
 - ✅ AI target guidance grounded in the computed numbers
 - ✅ Barcode + food-name lookup via Open Food Facts (country-aware, caveat-first)
-- ✅ Consumption tracking: log intake, consumed vs. remaining, daily achievement % + history
-- ⬜ Food suggestions based on remaining daily gaps, local availability, and past consumption
+- ✅ Consumption tracking: log intake, consumed vs. remaining, daily achievement % + history + weekly averages
+- ✅ Food suggestions based on remaining daily gaps, local availability (country) & recent foods
+- ✅ Quick wins: scan history, product compare, share/export, model-chain health badge, status-aware errors
 ```

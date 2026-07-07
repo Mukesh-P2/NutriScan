@@ -5,6 +5,8 @@ Status legend: ✅ done · 🔧 in progress · ⬜ planned
 ---
 
 ## Recently done
+- ✅ Food suggestions (#4), weekly averages, timezone-aware day boundary, lookup caching + auto cross-check
+- ✅ Scan history, product compare, share/export, model-chain health badge, status-aware error UX
 - ✅ Multi-image product scan → verdict, 0–100 score, pros/cons/tips
 - ✅ Daily-needs coverage per nutrient, serving & max-per-day guidance
 - ✅ Allergen / veg / diet-tag badges, trans-fat / palm-oil / ultra-processed flags
@@ -36,7 +38,8 @@ Resolve a scanned barcode / product name to real data via Open Food Facts.
 - [x] Endpoints `GET /api/lookup/barcode/{code}` & `/api/lookup/search`; Lookup tab + inline
       "cross-check barcode" on scan results
 - [x] Graceful "not found" fallback that points the user back to scanning the label
-- [ ] **Later:** cache lookups to cut latency & API calls; optionally auto-cross-check on scan
+- [x] Cache lookups (in-memory 1h TTL) to cut latency & API calls — `openfoodfacts.py`
+- [x] Auto-cross-check the scanned barcode on scan results (`ScanResponse.barcode_lookup`, best-effort)
 
 ### 3. ✅ Consumption tracking  *(needs #1)*
 - [x] `serving_nutrition` (numeric per-serving) added to scan output — feeds the tracker
@@ -46,22 +49,27 @@ Resolve a scanned barcode / product name to real data via Open Food Facts.
 - [x] "Should I eat this?" preview — fills-gaps vs. over-limit advice + general product feedback
 - [x] Endpoints: `preview`, `log`, `today`, `history`, delete(undo); **Today** dashboard tab
       (achievement ring, nutrient bars, entries w/ undo, 7-day history) + Consume panel on scans
-- [ ] **Later:** weekly averages; consume straight from a Lookup result; timezone-aware day boundary
+- [x] Weekly averages — `GET /api/consumption/weekly`, "This week" card on the Today tab
+- [x] Consume straight from a Lookup result — `ProductLookupCard` reuses `ConsumePanel` (per-100g → serving)
+- [x] Timezone-aware day boundary — `APP_TIMEZONE` setting + `local_today()` used at read & write time
 
-### 4. ⬜ Food suggestions  *(needs #3)* — NEXT
-- [ ] Recommend foods to fill remaining daily gaps (uses `today` remaining + targets)
-- [ ] Factor in local availability + past consumption / preferences
+### 4. ✅ Food suggestions  *(needs #3)*
+- [x] Recommend foods to fill remaining daily gaps — `GET /api/consumption/suggestions`; gaps computed
+      deterministically (targets − intake), AI only picks foods (`services/suggestions.py`, `prompts.py`)
+- [x] Factor in local availability + past consumption — optional `country` param + today's eaten foods
+      (for variety) are fed into the prompt; `SuggestionsPanel` on the Today tab
+- [ ] **Later:** persistent taste/preferences, multi-day history as input, one-tap "log this suggestion"
 
 ---
 
 ## Additional suggestions
 
 ### Quick wins
-- [ ] **Scan history** (even pre-login, via localStorage) so past scans persist
-- [ ] **Compare two products** side by side
-- [ ] **Loading / error UX** polish for the new failover states (429 vs 503 messaging)
-- [ ] **Health `/health` badge** in the UI showing active model chain
-- [ ] **Share / export** a scan result (image card or PDF)
+- [x] **Scan history** (pre-login, via localStorage) — `scanHistory.ts`, "Recent scans" on the Scan tab
+- [x] **Compare two products** side by side — `Compare` tab, sourced from scan history, per-nutrient winner
+- [x] **Loading / error UX** polish — `ErrorNotice` distinguishes rate-limit (429) vs busy (503) + retry
+- [x] **Health `/health` badge** — `HealthBadge` in the header shows the active model chain
+- [x] **Share / export** a scan result — Web Share / clipboard + `.txt` download (`shareResult.ts`)
 
 ### Backend / quality
 - [ ] **Automated tests** — pytest for routers + a mocked Gemini client (none exist yet)

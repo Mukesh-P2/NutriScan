@@ -50,6 +50,9 @@ export interface AnalysisResult {
   whole_pack_context: string | null;
   has_ingredients: boolean;
   missing_info: string[];
+  // Present on /api/analyze responses (ScanResponse): a best-effort Open Food Facts
+  // cross-check of the scanned barcode. The scanned label always wins; this is a hint.
+  barcode_lookup?: ProductLookup | null;
 }
 
 export interface AskResponse {
@@ -214,4 +217,40 @@ export interface DaySummary {
   calories_consumed: number;
   calories_target: number;
   entries: number;
+}
+
+export interface WeeklyAverages {
+  days: number;
+  days_logged: number;
+  targets_complete: boolean;
+  avg_achievement_pct: number;
+  avg_calories: number;
+  calories_target: number;
+  nutrients: NutrientProgress[];
+}
+
+// --- Food suggestions (fills today's remaining gaps; numbers stay deterministic) ---
+
+export interface FoodSuggestion {
+  food: string;
+  fills: string[];
+  serving_idea: string;
+  why: string;
+  is_veg: boolean;
+}
+
+export interface FoodSuggestions {
+  summary: string;
+  focus_nutrients: string[];
+  suggestions: FoodSuggestion[];
+  cautions: string[];
+  disclaimer: string;
+}
+
+// --- Service health (drives the header model badge) ---
+
+export interface Health {
+  status: string;
+  gemini_configured: boolean;
+  model_chain: string[];
 }

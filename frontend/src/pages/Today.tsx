@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../AuthContext";
 import Login from "./Login";
-import { deleteConsumption, fetchHistory, fetchToday } from "../consumption";
-import type { DailyProgress, DaySummary, NutrientProgress } from "../types";
+import { deleteConsumption, fetchHistory, fetchToday, fetchWeekly } from "../consumption";
+import type { DailyProgress, DaySummary, NutrientProgress, WeeklyAverages } from "../types";
+import SuggestionsPanel from "../components/SuggestionsPanel";
 
 function barColor(n: NutrientProgress): string {
   if (n.kind === "limit") return n.over ? "bg-rose-500" : "bg-slate-400";
@@ -36,14 +37,16 @@ export default function Today() {
   const { user } = useAuth();
   const [progress, setProgress] = useState<DailyProgress | null>(null);
   const [history, setHistory] = useState<DaySummary[]>([]);
+  const [weekly, setWeekly] = useState<WeeklyAverages | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
     try {
-      const [p, h] = await Promise.all([fetchToday(), fetchHistory(7)]);
+      const [p, h, w] = await Promise.all([fetchToday(), fetchHistory(7), fetchWeekly(7)]);
       setProgress(p);
       setHistory(h.days);
+      setWeekly(w);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load.");
     } finally {
@@ -106,6 +109,9 @@ export default function Today() {
         ))}
       </div>
 
+      {/* Food suggestions — fill what's left of today */}
+      <SuggestionsPanel />
+
       {/* Today's entries */}
       <div className="space-y-3 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
         <h3 className="font-semibold text-slate-700">Logged today</h3>
@@ -146,6 +152,38 @@ export default function Today() {
           ))}
         </div>
       </div>
+
+      {/* Weekly averages */}
+      {weekly && (
+        <div className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-slate-700">This week's averages</h3>
+            <span className="text-xs text-slate-400">
+              {weekly.days_logged}/{weekly.days} days logged
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+            <div>
+              <span className="text-slate-400">Avg day goal:</span>{" "}
+              <b className="text-slate-800">{weekly.avg_achievement_pct}%</b>
+            </div>
+            <div>
+              <span className="text-slate-400">Avg calories:</span>{" "}
+              <b className="text-slate-800">
+                {weekly.avg_calories} / {weekly.calories_target} kcal
+              </b>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {weekly.nutrients.map((n) => (
+              <NutrientBar key={n.name} n={n} />
+            ))}
+          </div>
+          <p className="text-xs text-slate-400">
+            Averaged over the last {weekly.days} days — days with nothing logged count as 0.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

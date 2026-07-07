@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { AnalysisResult, FoodType, ProductLookup, Verdict } from "../types";
 import { lookupBarcode } from "../api";
+import { downloadSummary, shareResult } from "../shareResult";
 import NutrientList from "./NutrientList";
 import ProductLookupCard from "./ProductLookupCard";
 import ConsumePanel from "./ConsumePanel";
@@ -44,6 +45,23 @@ export default function AnalysisCard({ result }: { result: AnalysisResult }) {
   const [dbProduct, setDbProduct] = useState<ProductLookup | null>(null);
   const [dbLoading, setDbLoading] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
+
+  // Auto cross-check attached by the backend (ScanResponse.barcode_lookup). When present we show
+  // it inline and skip the manual "look up barcode" button.
+  const auto = result.barcode_lookup && result.barcode_lookup.found ? result.barcode_lookup : null;
+  const crossCheck = dbProduct ?? auto;
+
+  async function onShare() {
+    const outcome = await shareResult(result);
+    setShareMsg(
+      outcome === "shared"
+        ? "Shared."
+        : outcome === "copied"
+          ? "Copied to clipboard."
+          : "Couldn't share — try Download.",
+    );
+  }
 
   async function lookUp() {
     if (!result.barcode) return;
@@ -80,6 +98,22 @@ export default function AnalysisCard({ result }: { result: AnalysisResult }) {
       </div>
 
       <p className="text-slate-600">{result.summary}</p>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={onShare}
+          className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+        >
+          🔗 Share / copy
+        </button>
+        <button
+          onClick={() => downloadSummary(result)}
+          className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+        >
+          ⬇ Download .txt
+        </button>
+        {shareMsg && <span className="text-xs text-emerald-600">{shareMsg}</span>}
+      </div>
 
       {(result.food_type !== "unknown" || result.allergens.length > 0 || result.diet_tags.length > 0) && (
         <div className="flex flex-wrap items-center gap-2">
@@ -155,7 +189,7 @@ export default function AnalysisCard({ result }: { result: AnalysisResult }) {
         nutrition={result.serving_nutrition}
       />
 
-      {result.barcode && !dbProduct && (
+      {result.barcode && !dbProduct && !auto && (
         <div className="border-t border-slate-100 pt-4">
           <button
             onClick={lookUp}
@@ -173,10 +207,12 @@ export default function AnalysisCard({ result }: { result: AnalysisResult }) {
       )}
     </div>
 
-    {dbProduct && (
+    {crossCheck && (
       <div className="mt-4">
-        <p className="mb-2 text-sm font-semibold text-slate-500">Database cross-check</p>
-        <ProductLookupCard product={dbProduct} />
+        <p className="mb-2 text-sm font-semibold text-slate-500">
+          Database cross-check{crossCheck === auto ? " · auto" : ""}
+        </p>
+        <ProductLookupCard product={crossCheck} />
       </div>
     )}
     </>

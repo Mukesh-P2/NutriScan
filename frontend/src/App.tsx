@@ -2,11 +2,13 @@ import { useState } from "react";
 import Scan from "./pages/Scan";
 import Ask from "./pages/Ask";
 import Lookup from "./pages/Lookup";
+import Compare from "./pages/Compare";
 import Today from "./pages/Today";
 import Profile from "./pages/Profile";
+import HealthBadge from "./components/HealthBadge";
 import { useAuth } from "./AuthContext";
 
-type Tab = "scan" | "ask" | "lookup" | "today" | "profile";
+type Tab = "scan" | "ask" | "lookup" | "compare" | "today" | "profile";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("scan");
@@ -22,11 +24,13 @@ export default function App() {
           <div className="flex items-center gap-2">
             <span className="text-2xl">🥗</span>
             <h1 className="text-xl font-bold text-emerald-700">NutriScan</h1>
+            <HealthBadge />
           </div>
-          <nav className="flex gap-1 rounded-lg bg-slate-100 p-1 text-sm font-medium">
+          <nav className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1 text-sm font-medium">
             <button onClick={() => setTab("scan")} className={tabClass("scan")}>Scan</button>
             <button onClick={() => setTab("ask")} className={tabClass("ask")}>Ask</button>
             <button onClick={() => setTab("lookup")} className={tabClass("lookup")}>Lookup</button>
+            <button onClick={() => setTab("compare")} className={tabClass("compare")}>Compare</button>
             <button onClick={() => setTab("today")} className={tabClass("today")}>Today</button>
             <button onClick={() => setTab("profile")} className={tabClass("profile")}>
               {user ? "👤 " + (user.name || "Profile") : "Log in"}
@@ -39,6 +43,7 @@ export default function App() {
         {tab === "scan" && <Scan />}
         {tab === "ask" && <Ask />}
         {tab === "lookup" && <Lookup />}
+        {tab === "compare" && <Compare />}
         {tab === "today" && <Today />}
         {tab === "profile" && <Profile />}
       </main>

@@ -5,6 +5,8 @@ import type {
   ConsumptionRecommendation,
   DailyProgress,
   DaySummary,
+  FoodSuggestions,
+  WeeklyAverages,
 } from "./types";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
@@ -39,4 +41,13 @@ export async function deleteConsumption(id: number): Promise<DailyProgress> {
 
 export async function fetchHistory(days = 7): Promise<{ days: DaySummary[] }> {
   return (await authFetch(`/api/consumption/history?days=${days}`)).json();
+}
+
+export async function fetchWeekly(days = 7): Promise<WeeklyAverages> {
+  return (await authFetch(`/api/consumption/weekly?days=${days}`)).json();
+}
+
+export async function fetchSuggestions(country?: string): Promise<FoodSuggestions> {
+  const qs = country && country.trim() ? `?country=${encodeURIComponent(country.trim())}` : "";
+  return (await authFetch(`/api/consumption/suggestions${qs}`)).json();
 }

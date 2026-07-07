@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { analyzeImages } from "../api";
 import type { AnalysisResult } from "../types";
 import AnalysisCard from "../components/AnalysisCard";
 import ImagePicker from "../components/ImagePicker";
+import ErrorNotice from "../components/ErrorNotice";
+import { addScan, clearScanHistory, getScanHistory, removeScan, type ScanHistoryItem } from "../scanHistory";
 
 export default function Scan() {
   const [files, setFiles] = useState<File[]>([]);
@@ -10,18 +12,31 @@ export default function Scan() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<ScanHistoryItem[]>([]);
+
+  useEffect(() => {
+    setHistory(getScanHistory());
+  }, []);
 
   async function run() {
     setLoading(true);
     setError(null);
     setResult(null);
     try {
-      setResult(await analyzeImages(files, totalWeight));
+      const res = await analyzeImages(files, totalWeight);
+      setResult(res);
+      setHistory(addScan(res));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
       setLoading(false);
     }
+  }
+
+  function reopen(item: ScanHistoryItem) {
+    setResult(item.result);
+    setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   return (
@@ -56,10 +71,50 @@ export default function Scan() {
         >
           {loading ? "Analyzing…" : "Analyze"}
         </button>
-        {error && <p className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+        {error && (
+          <div className="mt-3">
+            <ErrorNotice message={error} onRetry={files.length > 0 ? run : undefined} />
+          </div>
+        )}
       </div>
 
       {result && <AnalysisCard result={result} />}
+
+      {history.length > 0 && (
+        <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="font-semibold text-slate-700">Recent scans</h3>
+            <button
+              onClick={() => setHistory(clearScanHistory())}
+              className="text-xs font-semibold text-slate-400 hover:text-rose-600"
+            >
+              Clear all
+            </button>
+          </div>
+          <ul className="divide-y divide-slate-100">
+            {history.map((h) => (
+              <li key={h.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <button onClick={() => reopen(h)} className="min-w-0 flex-1 truncate text-left hover:text-emerald-700">
+                  <span className="font-medium text-slate-700">{h.result.product_name}</span>
+                  <span className="ml-2 text-xs text-slate-400">
+                    {h.result.verdict} · {h.result.score}/100
+                  </span>
+                </button>
+                <button
+                  onClick={() => setHistory(removeScan(h.id))}
+                  aria-label="Remove from history"
+                  className="shrink-0 text-xs font-semibold text-slate-300 hover:text-rose-600"
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-slate-400">
+            Saved on this device only. Line any two up in the <b>Compare</b> tab.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

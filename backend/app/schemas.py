@@ -4,6 +4,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from app.lookup_schemas import ProductLookup
+
 
 class Verdict(str, Enum):
     healthy = "healthy"
@@ -112,6 +114,20 @@ class AnalysisResult(BaseModel):
     )
 
 
+class ScanResponse(AnalysisResult):
+    """A scan result plus an optional best-effort Open Food Facts cross-check of the scanned barcode.
+
+    This is the API response for /api/analyze — NOT a Gemini schema. It subclasses AnalysisResult
+    so every analysis field stays at the top level (unchanged client contract) and only ADDS
+    barcode_lookup. The scanned label always wins; the lookup is a hint (see its caveats).
+    """
+
+    barcode_lookup: ProductLookup | None = Field(
+        default=None,
+        description="Auto cross-check of the scanned barcode against Open Food Facts, if a product was found",
+    )
+
+
 class AskResponse(BaseModel):
     """Answer to a free-form food question."""
 
@@ -149,3 +165,33 @@ class TargetGuidance(BaseModel):
         description="True if the profile looks medically unusual (very low/high BMI, very young, etc.)",
     )
     disclaimer: str = Field(description="Short note that this is general guidance, not medical advice")
+
+
+class FoodSuggestion(BaseModel):
+    """One recommended food to help close a remaining daily gap."""
+
+    food: str = Field(description="A specific everyday food, e.g. 'Greek yogurt' or 'a boiled egg'")
+    fills: list[str] = Field(
+        default_factory=list, description="Which of the user's remaining nutrients this helps with, by name"
+    )
+    serving_idea: str = Field(description="A simple portion, e.g. 'a small bowl (~150g)'")
+    why: str = Field(description="One line: how it fits the remaining gaps and the user's goal")
+    is_veg: bool = Field(default=True, description="True if vegetarian-friendly")
+
+
+class FoodSuggestions(BaseModel):
+    """Foods to help fill TODAY's remaining nutrient gaps.
+
+    The gaps are computed deterministically (targets − intake) and handed to the model as fixed
+    facts; the AI only picks foods and must never restate different target/remaining numbers.
+    """
+
+    summary: str = Field(description="1-2 sentence overview of what to prioritize for the rest of today")
+    focus_nutrients: list[str] = Field(
+        default_factory=list, description="The remaining nutrients being targeted"
+    )
+    suggestions: list[FoodSuggestion] = Field(default_factory=list)
+    cautions: list[str] = Field(
+        default_factory=list, description="What to avoid, e.g. limits already near or over"
+    )
+    disclaimer: str = Field(description="Brief note that this is general guidance, not medical advice")
