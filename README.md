@@ -34,6 +34,13 @@ A web app that analyzes food products from photos, answers food questions, and t
 
 ## Setup & run
 
+### 0. Clone the repo
+
+```bash
+git clone https://github.com/Mukesh-P2/NutriScan.git
+cd NutriScan
+```
+
 ### 1. Backend
 
 ```bash
