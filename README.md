@@ -188,16 +188,16 @@ NutriScan is a **working MVP with the pre-production essentials in place**. What
 - **Structured logging + request IDs** (`X-Request-ID` on every response; `LOG_JSON=true` for prod)
   and **global error handling** (unexpected errors → clean 500, no stack-trace leakage).
 - **Docker** — `docker compose up --build` runs backend + nginx-served frontend (+ optional Postgres).
+- **CI** — `.github/workflows/ci.yml` runs the backend `pytest` suite (Python 3.12), a scratch-DB
+  `alembic upgrade head` (migration-drift check), and the frontend build (`npm ci` + `npm run build`)
+  on every push to `main` and every PR. It activates once the repo is pushed to GitHub; mark the jobs
+  as required status checks to block merges on red.
 
 **Still to do before a large public launch**
 - Swap SQLite for **Postgres** (`DATABASE_URL`) — the compose Postgres profile needs a driver
   (`psycopg[binary]`) added to `requirements.txt`.
 - Rate limiting and the Open Food Facts cache are **in-memory per process**; use a shared store
   (e.g. Redis) across multiple instances. The day boundary is **app-global** (`APP_TIMEZONE`), not per user.
-- **CI** (GitHub Actions) — *planned, not yet wired up*. A workflow on every push / PR that runs the
-  backend `pytest` suite (Python 3.12) and the frontend build gate (`npm ci` + `npm run build`, i.e.
-  `tsc` typecheck + `vite build`), set as required status checks so a red build blocks merge to `main`.
-  Optionally `alembic upgrade head` against a scratch DB to catch migration drift.
 - **Error tracking** (e.g. Sentry) and **response caching** for repeat images / questions — see `TODO.md`.
 - Serve over **HTTPS** and lock `CORS_ORIGINS` to your real frontend origin.
 
@@ -216,4 +216,3 @@ See `TODO.md` for the full backlog.
 - ✅ Consumption tracking: log intake, consumed vs. remaining, daily achievement % + history + weekly averages
 - ✅ Food suggestions based on remaining daily gaps, local availability (country) & recent foods
 - ✅ Quick wins: scan history, product compare, share/export, model-chain health badge, status-aware errors
-```
