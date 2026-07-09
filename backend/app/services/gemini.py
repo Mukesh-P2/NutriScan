@@ -1,5 +1,6 @@
 """All Gemini API calls live here so routers stay thin."""
 
+import logging
 import time
 
 from google import genai
@@ -14,6 +15,8 @@ from app.prompts import (
     TARGET_GUIDANCE_INSTRUCTIONS,
 )
 from app.schemas import AnalysisResult, AskResponse, FoodSuggestions, TargetGuidance, Verdict
+
+logger = logging.getLogger("nutriscan.gemini")
 
 _client: genai.Client | None = None
 
@@ -77,8 +80,14 @@ def _generate(parts: list[types.Part], schema: type[BaseModel]):
                 if getattr(exc, "code", None) not in _RETRYABLE_CODES:
                     raise _to_user_error(exc) from exc
                 last_exc = exc  # transient -> try the next model in the chain immediately
+                logger.warning(
+                    "Gemini model %s failed (code %s); failing over to next in chain.",
+                    model, getattr(exc, "code", None),
+                )
         if attempt < _MAX_ATTEMPTS - 1:
-            time.sleep(_BASE_DELAY * (2**attempt))  # whole chain failed this round; back off
+            delay = _BASE_DELAY * (2**attempt)
+            logger.warning("Whole Gemini chain exhausted (round %d); backing off %.0fs.", attempt + 1, delay)
+            time.sleep(delay)  # whole chain failed this round; back off
     raise _to_user_error(last_exc)  # pragma: no cover - loop always returns or raises
 
 

@@ -4,6 +4,50 @@ Status legend: ✅ done · 🔧 in progress · ⬜ planned
 
 ---
 
+## Pre-production essentials  🔧 (active focus — clear these before launch)
+
+Ordered by priority. Goal: make the working MVP safe to run as a real service.
+
+**P0 — must-have**
+- [x] **Automated tests** — pytest (52 tests): throwaway in-memory SQLite + TestClient, monkeypatched
+      Gemini & Open Food Facts. Covers auth, profile/targets, consumption (log/today/weekly/history/undo),
+      suggestions, lookup, analyze, config validation, rate limiting, error handling, and the
+      deterministic engines (nutrition, scoring, consumption). Run: `pytest` (see `backend/tests/`).
+- [x] **Config & secret hardening** — `APP_ENV` (dev/prod); `Settings.validate_for_env()` fails fast in
+      prod on default `JWT_SECRET`, missing `GEMINI_API_KEY`, or wildcard CORS (warns in dev). Enforced
+      on startup in `main.lifespan`.
+- [x] **Rate limiting** — in-memory fixed-window limiter (`services/ratelimit.py`) per identity
+      (user id, else IP) on the AI endpoints (`/analyze`, `/ask`, `/profile/guidance`,
+      `/consumption/suggestions`). Configurable via `RATE_LIMIT_ENABLED` / `_AI_PER_MINUTE` / `_AI_PER_DAY`;
+      `RATE_LIMIT_ENABLED=false` removes it. 429 + `Retry-After`. *(Per-process — see multi-instance note below.)*
+- [x] **Dockerfile + docker-compose** — `backend/Dockerfile` (slim, non-root, uvicorn),
+      `frontend/Dockerfile` (Vite build → nginx, proxies `/api`), `docker-compose.yml` (backend +
+      frontend + optional Postgres profile). One command: `docker compose up --build`.
+
+**P1 — strongly recommended**
+- [x] **DB migrations (Alembic)** — `alembic/` wired to `Base.metadata` + `settings.database_url`;
+      initial migration for `users`/`profiles`/`consumption_logs`; `render_as_batch` for SQLite-safe
+      ALTERs. **Dev keeps `create_all` on startup; prod runs `alembic upgrade head`.**
+- [x] **Structured logging + request IDs** — `logging_config.py` (plain or JSON via `LOG_JSON`, level
+      via `LOG_LEVEL`); request-id middleware sets/echoes `X-Request-ID` and binds it to every log line;
+      `gemini._generate` logs model failovers.
+- [x] **Global error handling** — exception handlers in `main.py`: `AIServiceError` → its status,
+      unhandled → clean 500 (`{"detail": ...}`, full detail logged, no stack trace leaked); the
+      `{"detail": ...}` shape the frontend relies on is preserved.
+- [ ] **CI (GitHub Actions)** — *deferred, not yet implemented.* Planned: a workflow triggered on every
+      push and pull request that (1) sets up Python 3.12, installs `backend/requirements-dev.txt`, and runs
+      `pytest` from `backend/`; (2) sets up Node, runs `npm ci` and `npm run build` (i.e. `tsc` typecheck +
+      `vite build`) in `frontend/`; and (3) is marked a required status check so red builds block merge to
+      `main`. Optionally add `alembic upgrade head` against a scratch DB to catch migration drift.
+
+**P2 — nice to have**
+- [ ] **Response caching** for identical analyze images / repeated questions.
+- [ ] **Error tracking** (e.g. Sentry) + a DB-readiness check on `/health`.
+- [ ] **Shared-store rate limiting** (e.g. Redis) — the current limiter is per-process, so it under-counts
+      across multiple backend instances. Fine for single-instance; revisit when scaling horizontally.
+
+---
+
 ## Recently done
 - ✅ Food suggestions (#4), weekly averages, timezone-aware day boundary, lookup caching + auto cross-check
 - ✅ Scan history, product compare, share/export, model-chain health badge, status-aware error UX
@@ -71,12 +115,12 @@ Resolve a scanned barcode / product name to real data via Open Food Facts.
 - [x] **Health `/health` badge** — `HealthBadge` in the header shows the active model chain
 - [x] **Share / export** a scan result — Web Share / clipboard + `.txt` download (`shareResult.ts`)
 
-### Backend / quality
-- [ ] **Automated tests** — pytest for routers + a mocked Gemini client (none exist yet)
-- [ ] **Rate limiting** per IP/user to protect the free-tier key
+### Backend / quality  *(now tracked under "Pre-production essentials" above)*
+- [x] **Automated tests** — pytest for routers + engines with a monkeypatched Gemini client
+- [x] **Rate limiting** per IP/user to protect the free-tier key
 - [ ] **Response caching** for identical images / repeated questions
-- [ ] **Structured logging + request IDs** for debugging failovers
-- [ ] **Dockerfile + docker-compose** for one-command run
+- [x] **Structured logging + request IDs** for debugging failovers
+- [x] **Dockerfile + docker-compose** for one-command run
 
 ### Product / AI
 - [ ] **Serving-size slider** — recompute daily-% live for a custom portion

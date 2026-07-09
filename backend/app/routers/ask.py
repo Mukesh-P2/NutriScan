@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 
-from app.deps import get_current_user_optional
+from app.deps import get_current_user_optional, rate_limit_ai
 from app.models.user import User
 from app.schemas import AskResponse
 from app.services import gemini
@@ -21,7 +21,7 @@ def _personal_context(user: User | None) -> str | None:
     return personal_targets_context(targets) if targets.complete else None
 
 
-@router.post("/ask", response_model=AskResponse)
+@router.post("/ask", response_model=AskResponse, dependencies=[Depends(rate_limit_ai)])
 async def ask(
     question: str = Form(...),
     image: UploadFile | None = None,

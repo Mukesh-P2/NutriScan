@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 
-from app.deps import get_current_user_optional
+from app.deps import get_current_user_optional, rate_limit_ai
 from app.models.user import User
 from app.schemas import ScanResponse
 from app.services import gemini, openfoodfacts
@@ -24,7 +24,7 @@ MAX_BYTES = 8 * 1024 * 1024  # 8 MB per image
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
 
 
-@router.post("/analyze", response_model=ScanResponse)
+@router.post("/analyze", response_model=ScanResponse, dependencies=[Depends(rate_limit_ai)])
 async def analyze(
     images: list[UploadFile] = File(...),
     total_weight: str | None = Form(None),

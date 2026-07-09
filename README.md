@@ -57,6 +57,38 @@ npm run dev
 
 Frontend runs at http://localhost:5173 and proxies `/api` to the backend.
 
+### 3. Run the tests (backend)
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest                                   # whole suite
+pytest tests/test_scoring.py::test_junk_food_scores_unhealthy   # a single test
+```
+
+Tests use a throwaway in-memory SQLite DB and a monkeypatched Gemini / Open Food Facts, so
+they need **no API key and hit no network**.
+
+### 4. Run everything with Docker (optional)
+
+```bash
+docker compose up --build
+#   frontend → http://localhost:8080   backend → http://localhost:8000
+```
+
+Set `JWT_SECRET`, `GEMINI_API_KEY`, and `APP_ENV=prod` in a `.env` next to `docker-compose.yml`
+before any real deployment. A Postgres profile is available: `docker compose --profile postgres up`.
+
+### Database migrations
+
+Dev creates tables automatically on startup (`create_all`). For production, use Alembic:
+
+```bash
+cd backend
+alembic upgrade head        # apply migrations (Postgres or SQLite)
+alembic revision --autogenerate -m "describe change"   # after changing models/
+```
+
 ## Using the app — feature walkthrough
 
 NutriScan is organised into tabs across the top. Most features work logged-out; **tracking and personalization need an account**.
@@ -143,27 +175,36 @@ fitness/
 
 ## Production readiness
 
-NutriScan is a **fully working prototype / MVP**, not yet production-hardened. Before a public deploy:
+NutriScan is a **working MVP with the pre-production essentials in place**. What's already done:
 
-**Security & config**
-- Set a strong `JWT_SECRET` (default is `dev-secret-change-me`); keep `GEMINI_API_KEY` server-side only.
-- Lock `CORS_ORIGINS` to your real frontend origin and serve over HTTPS.
-- Add **rate limiting** per IP/user — the free-tier Gemini key is otherwise easy to exhaust.
+**Done**
+- **Config fail-fast** — set `APP_ENV=prod` and the app refuses to start with an insecure config
+  (default `JWT_SECRET`, missing `GEMINI_API_KEY`, or wildcard CORS). In dev these only warn.
+- **Rate limiting** on the AI endpoints per identity (user id, else IP) — tune via
+  `RATE_LIMIT_ENABLED` / `RATE_LIMIT_AI_PER_MINUTE` / `RATE_LIMIT_AI_PER_DAY`.
+- **Automated tests** — a pytest suite (52 tests) covering the engines, routers, config, rate
+  limiting, and error handling; no key or network needed.
+- **Migrations** — Alembic for prod (`alembic upgrade head`); dev still auto-creates tables.
+- **Structured logging + request IDs** (`X-Request-ID` on every response; `LOG_JSON=true` for prod)
+  and **global error handling** (unexpected errors → clean 500, no stack-trace leakage).
+- **Docker** — `docker compose up --build` runs backend + nginx-served frontend (+ optional Postgres).
 
-**Data & scale**
-- Swap SQLite for **Postgres** (`DATABASE_URL`) and add migrations (e.g. Alembic) — there's no migration tooling yet, so schema changes need care.
-- The Open Food Facts cache is **in-memory per process**; use a shared cache (e.g. Redis) across multiple instances.
-- The day boundary is **app-global** (`APP_TIMEZONE`), not per user.
-
-**Quality & ops**
-- **No automated tests yet** — add pytest for the routers + a mocked Gemini client (the biggest gap).
-- Add structured logging + request IDs, error tracking, and a `Dockerfile` / compose for one-command deploy.
-- Build the frontend (`npm run build`) and serve `dist/` from static hosting / a CDN pointed at the API.
+**Still to do before a large public launch**
+- Swap SQLite for **Postgres** (`DATABASE_URL`) — the compose Postgres profile needs a driver
+  (`psycopg[binary]`) added to `requirements.txt`.
+- Rate limiting and the Open Food Facts cache are **in-memory per process**; use a shared store
+  (e.g. Redis) across multiple instances. The day boundary is **app-global** (`APP_TIMEZONE`), not per user.
+- **CI** (GitHub Actions) — *planned, not yet wired up*. A workflow on every push / PR that runs the
+  backend `pytest` suite (Python 3.12) and the frontend build gate (`npm ci` + `npm run build`, i.e.
+  `tsc` typecheck + `vite build`), set as required status checks so a red build blocks merge to `main`.
+  Optionally `alembic upgrade head` against a scratch DB to catch migration drift.
+- **Error tracking** (e.g. Sentry) and **response caching** for repeat images / questions — see `TODO.md`.
+- Serve over **HTTPS** and lock `CORS_ORIGINS` to your real frontend origin.
 
 **Product caveat**
 - AI label OCR can misread; scores and targets stay deterministic, but users should always verify against the physical label (the UI says so).
 
-**Verdict:** great for demos, personal use, and pilots — complete the checklist above for a public production launch.
+**Verdict:** ready for pilots and small deployments; complete the "still to do" list for a large public launch.
 
 ## Roadmap
 

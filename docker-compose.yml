@@ -1,0 +1,48 @@
+# One-command run:  docker compose up --build
+#   frontend → http://localhost:8080   (nginx serves the built SPA, proxies /api to backend)
+#   backend  → http://localhost:8000   (FastAPI; docs at /docs)
+#
+# Configure via a .env file next to this one (or shell env). Set a strong JWT_SECRET and a real
+# GEMINI_API_KEY, and APP_ENV=prod to enforce secure config.
+
+services:
+  backend:
+    build: ./backend
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      APP_TIMEZONE: ${APP_TIMEZONE:-UTC}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      # SQLite on a named volume by default. For Postgres, enable the `db` service below and set:
+      #   DATABASE_URL=postgresql+psycopg://nutriscan:nutriscan@db:5432/nutriscan
+      #   (also add `psycopg[binary]` to backend/requirements.txt)
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/nutriscan.db}
+    volumes:
+      - backend_data:/data
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+  # Optional Postgres — start with:  docker compose --profile postgres up --build
+  db:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: nutriscan
+      POSTGRES_PASSWORD: nutriscan
+      POSTGRES_DB: nutriscan
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+volumes:
+  backend_data:
+  pg_data:

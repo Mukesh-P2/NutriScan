@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.auth_schemas import NutritionTargets, ProfileRead, ProfileUpdate
 from app.db import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, rate_limit_ai
 from app.models.user import Profile, User
 from app.schemas import TargetGuidance
 from app.services import gemini
@@ -42,7 +42,7 @@ def get_targets(current: User = Depends(get_current_user)) -> NutritionTargets:
     return compute_targets(current.profile)
 
 
-@router.get("/guidance", response_model=TargetGuidance)
+@router.get("/guidance", response_model=TargetGuidance, dependencies=[Depends(rate_limit_ai)])
 def get_guidance(current: User = Depends(get_current_user)) -> TargetGuidance:
     """AI guidance grounded in the user's computed targets.
 

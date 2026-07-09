@@ -23,7 +23,7 @@ from app.consumption_schemas import (
     WeeklyAverages,
 )
 from app.db import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, rate_limit_ai
 from app.models.consumption import ConsumptionLog
 from app.models.user import User
 from app.schemas import FoodSuggestions
@@ -166,7 +166,7 @@ def weekly(
     return engine.weekly_averages(targets, daily, days_logged)
 
 
-@router.get("/suggestions", response_model=FoodSuggestions)
+@router.get("/suggestions", response_model=FoodSuggestions, dependencies=[Depends(rate_limit_ai)])
 def suggestions(
     country: str | None = Query(None, description="Optional country for locally available foods"),
     current: User = Depends(get_current_user),
